@@ -231,7 +231,8 @@ class CarInterface(CarInterfaceBase):
       ret.mass = 3410. * CV.LB_TO_KG + STD_CARGO_KG
       ret.wheelbase = 2.66
       ret.centerToFront = ret.wheelbase * 0.41
-      ret.steerRatio = 16.0  # 12.3 is spec end-to-end
+      ret.steerRatio = 15.1  # 12.3 is spec end-to-end
+      ret.steerRatioV = 0.008
       tire_stiffness_factor = 0.677
       ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.6], [0.18]]
       ret.longitudinalTuning.kpBP = [0., 5., 35.]
