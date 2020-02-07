@@ -12,5 +12,4 @@
 	url = ../../commaai/openpilot-apks.git
 [submodule "cereal"]
 	path = cereal
-	url = ../../commaai/cereal.git
-
+	url = ../../jpancotti/cereal.git
