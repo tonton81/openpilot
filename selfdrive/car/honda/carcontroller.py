@@ -134,6 +134,8 @@ class CarController():
     # **** process the car messages ****
 
     # steer torque is converted back to CAN reference (positive when steering right)
+
+    BRAKE_MAX = 1024//4
     apply_gas = clip(actuators.gas, 0., 1.)
     apply_brake = int(clip(self.brake_last * BRAKE_MAX, 0, BRAKE_MAX - 1))
     apply_steer = int(interp(-actuators.steer * P.STEER_MAX, P.STEER_LOOKUP_BP, P.STEER_LOOKUP_V))
