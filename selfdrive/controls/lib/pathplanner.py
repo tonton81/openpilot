@@ -89,7 +89,7 @@ class PathPlanner():
     self.LP.parse_model(sm['model'])
 #############
     # Dynamic steerRatio
-    self.steerRatioNew = CP.steerRatio - CP.steerRatioV * (abs(angle_steers))
+    self.steerRatioNew = CP.steerRatio - 0.009 * (abs(angle_steers))
     self.steerRatio = self.steerRatioNew
 
 #############
