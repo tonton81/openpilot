@@ -169,6 +169,7 @@ class CarInterface(CarInterfaceBase):
     # Tire stiffness factor fictitiously lower if it includes the steering column torsion effect.
     # For modeling details, see p.198-200 in "The Science of Vehicle Dynamics (2014), M. Guiggiani"
 
+    ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0], [0]]
     ret.lateralTuning.pid.kiBP, ret.lateralTuning.pid.kpBP = [[0.], [0.]]
     ret.lateralTuning.pid.kf = 0.00006 # conservative feed-forward
 
@@ -177,16 +178,58 @@ class CarInterface(CarInterfaceBase):
       if fw.ecu == "eps" and b"," in fw.fwVersion:
         eps_modified = True
 
-    if candidate in [CAR.CIVIC, CAR.CIVIC_BOSCH]:
+    if candidate == CAR.CIVIC:
       stop_and_go = True
       ret.mass = CivicParams.MASS
       ret.wheelbase = CivicParams.WHEELBASE
       ret.centerToFront = CivicParams.CENTER_TO_FRONT
       ret.steerRatio = 15.38  # 10.93 is end-to-end spec
+      # TODO: can we imporve steering control by adding all breakpoints from firmware and adjust interp output to have constant slope?
+      if eps_modified:
+        # stock request output values:    0x0000, 0x0917, 0x0DC5, 0x1017, 0x119F, 0x140B, 0x1680, 0x1680, 0x1680
+        # modified request output values: 0x0000, 0x0917, 0x0DC5, 0x1017, 0x119F, 0x140B, 0x1680, 0x2880, 0x2D00
+        # stock filter output values:     0x009F, 0x0108, 0x0108, 0x0108, 0x0108, 0x0108, 0x0108, 0x0108, 0x0108
+        # modified filter output values:  0x009F, 0x0108, 0x0108, 0x0108, 0x0108, 0x0108, 0x0108, 0x0400, 0x0480
+        # note: max request allowed is 4096, but request is clamped to at 3840 in fw torque curve lookup function
+        # 2D00 is 2x max of 1680
+        # command of 0xF00 * ddb4 >> 0xf >> 0x2 = 0x67E torque table index -> 2D00 torque table output
+        # torque table goes up to 0x6EE but lookup function input is clamped at 67E therefore max request is 0xF00
+        ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 0x917, 0xDC5, 0x1017, 0x119F, 0x140B, 0x1680, 0x2880, 0x2D00],  [0x0, 0x1E0, 0x2D0, 0x42F, 0x58B, 0x780, 0x95E, 0xD1F, 0xF00]]
+        ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.4], [0.12]]
+      else:
+        ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0x0, 0x917, 0xDC5, 0x1017, 0x119F, 0x140B, 0x1680], [0x0, 0x1E0, 0x2D0, 0x42F, 0x58B, 0x780, 0x95E]] # max request allowed is 4096, but above 2560 is flat
+        # torque table goes up to 0x6EE but lookup function input is clamped at 67E therefore max request is 0xF00, but output is flat above 0x95E, so dont send higher
+        ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.8], [0.24]]
       tire_stiffness_factor = 1.
 
-      ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.4], [0.12]] if eps_modified else [[0.8], [0.24]]
-      ret.lateralTuning.pid.kf = 0.00006
+      ret.longitudinalTuning.kpBP = [0., 5., 35.]
+      ret.longitudinalTuning.kpV = [3.6, 2.4, 1.5]
+      ret.longitudinalTuning.kiBP = [0., 35.]
+      ret.longitudinalTuning.kiV = [0.54, 0.36]
+
+    elif candidate == CAR.CIVIC_BOSCH:
+      stop_and_go = True
+      ret.mass = CivicParams.MASS
+      ret.wheelbase = CivicParams.WHEELBASE
+      ret.centerToFront = CivicParams.CENTER_TO_FRONT
+      ret.steerRatio = 15.38  # 10.93 is end-to-end spec
+      if eps_modified:
+        # stock request output values:    0x0000, 0x0380, 0x0800, 0x0c00, 0x0eb6, 0x10ae, 0x1200, 0x1200, 0x1200
+        # modified request output values: 0x0000, 0x0746, 0x0B04, 0x0CDF, 0x0E19, 0x1008, 0x1200, 0x1B00, 0x2400
+        # stock filter output values:     0x009F, 0x0108, 0x0108, 0x0108, 0x0108, 0x0108, 0x0108, 0x0108, 0x0108
+        # modified filter output values:  0x009F, 0x0108, 0x0108, 0x0108, 0x0108, 0x0108, 0x0108, 0x0400, 0x0480
+        # note: max request allowed is 4096, but request is clamped to at 3840 in fw torque curve lookup function
+        # 2400 is 2x max of 1200
+        # command of 0xF00 * 0xDDB4 >> 0xF >> 0x2 = 0x67E torque table index -> 3600 torque table output
+        # torque table goes up to 0x6EE but lookup function input is clamped at 67E therefore max request is 0xF00
+        ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0x0, 0x746, 0xB04, 0xCDF, 0xE19, 0x1008, 0x1200, 0x1B00, 0x2400], [0x0, 0x1E0, 0x2D0, 0x42F, 0x58B, 0x780, 0x95E, 0xD1F, 0xF00]]
+        ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.5], [0.11]]
+      else:
+        ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0x0, 0x746, 0xB04, 0xCDF, 0xE19, 0x1008, 0x1200], [0x0, 0x1E0, 0x2D0, 0x42F, 0x58B, 0x780, 0x95E]] # max request allowed is 4096, but above 2560 is flat
+        # torque table goes up to 0x6EE but lookup function input is clamped at 67E therefore max request is 0xF00, but output is flat above 0x95E, so dont send higher
+        ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.8], [0.24]]
+      tire_stiffness_factor = 1.
+
       ret.longitudinalTuning.kpBP = [0., 5., 35.]
       ret.longitudinalTuning.kpV = [3.6, 2.4, 1.5]
       ret.longitudinalTuning.kiBP = [0., 35.]
@@ -200,6 +243,7 @@ class CarInterface(CarInterfaceBase):
       ret.wheelbase = 2.83
       ret.centerToFront = ret.wheelbase * 0.39
       ret.steerRatio = 16.33  # 11.82 is spec end-to-end
+      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]] # TODO: determine if there is a dead zone at the top end
       tire_stiffness_factor = 0.8467
       ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.6], [0.18]]
       ret.longitudinalTuning.kpBP = [0., 5., 35.]
@@ -213,6 +257,7 @@ class CarInterface(CarInterfaceBase):
       ret.wheelbase = 2.67
       ret.centerToFront = ret.wheelbase * 0.37
       ret.steerRatio = 18.61  # 15.3 is spec end-to-end
+      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 3840], [0, 3840]] # TODO: determine if there is a dead zone at the top end
       tire_stiffness_factor = 0.72
       ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.8], [0.24]]
       ret.longitudinalTuning.kpBP = [0., 5., 35.]
@@ -226,6 +271,7 @@ class CarInterface(CarInterfaceBase):
       ret.wheelbase = 2.62
       ret.centerToFront = ret.wheelbase * 0.41
       ret.steerRatio = 16.89  # as spec
+      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 1000], [0, 1000]] # TODO: determine if there is a dead zone at the top end
       tire_stiffness_factor = 0.444
       ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.8], [0.24]]
       ret.longitudinalTuning.kpBP = [0., 5., 35.]
@@ -239,9 +285,23 @@ class CarInterface(CarInterfaceBase):
       ret.mass = 3410. * CV.LB_TO_KG + STD_CARGO_KG
       ret.wheelbase = 2.66
       ret.centerToFront = ret.wheelbase * 0.41
-      ret.steerRatio = 16.0  # 12.3 is spec end-to-end
-      tire_stiffness_factor = 0.677
-      ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.6], [0.18]]
+      ret.steerRatio = 15.2
+      # TODO: can we imporve steering control by adding all breakpoints from firmware and adjust interp output to have constant slope?
+      if eps_modified:
+        # stock request output values:    0x0000, 0x0500, 0x0A15, 0x0E6D, 0x1100, 0x1200, 0x129A, 0x134D, 0x1400
+        # modified request output values: 0x0000, 0x0500, 0x0A15, 0x0E6D, 0x1100, 0x1200, 0x1955, 0x20AA, 0x2800
+        # stock filter output values:     0x009F, 0x0108, 0x0108, 0x0108, 0x0108, 0x0108, 0x0108, 0x0108, 0x0108
+        # modified filter output values:  0x009F, 0x0108, 0x0108, 0x0108, 0x0108, 0x0108, 0x0108, 0x0400, 0x0480
+        # note: max request allowed is 4096, but request is clamped to at 3840 in fw torque curve lookup function
+        # 2800 is 2x max of 1400
+        # command of 0xF00 * ddb4 >> 0xf >> 0x2 = 0x67E torque table index -> 3C00 torque table output
+        # torque table lookup is clamped at 6EE but table only goes up to 67E therefore max request is 0xF00
+        ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0x0, 0x500, 0xA15, 0xE6D, 0x1100, 0x1200, 0x2000, 0x2E00, 0x3C00], [0x0, 0x200, 0x400, 0x600, 0x800, 0xA00, 0xC00, 0xE00, 0xF00]]
+        ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.3], [0.09]]
+      else:
+        ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0x0, 0x500, 0xA15, 0xE6D, 0x1100, 0x1200, 0x129A, 0x134D, 0x1400], [0x0, 0x200, 0x400, 0x600, 0x800, 0xA00, 0xC00, 0xE00, 0xF00]]
+        ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.6], [0.18]]
+      tire_stiffness_factor = 0.6
       ret.longitudinalTuning.kpBP = [0., 5., 35.]
       ret.longitudinalTuning.kpV = [1.2, 0.8, 0.5]
       ret.longitudinalTuning.kiBP = [0., 35.]

@@ -70,6 +70,9 @@ function launch {
     rm -rf /data/neoupdate
   fi
 
+  #start wifi
+  service call wifi 37 i32 0 i32 1
+
   # Check for NEOS update
   if [ $(< /VERSION) != "14" ]; then
     if [ -f "$DIR/scripts/continue.sh" ]; then

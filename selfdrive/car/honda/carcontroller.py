@@ -80,6 +80,15 @@ HUDData = namedtuple("HUDData",
                      ["pcm_accel", "v_cruise",  "car",
                      "lanes", "fcw", "acc_alert", "steer_required"])
 
+class CarControllerParams():
+    def __init__(self, CP):
+        self.BRAKE_MAX = 1024//4
+        self.STEER_MAX = CP.lateralParams.torqueBP[-1]
+        # mirror of list (assuming first item is zero) for interp of signed request values
+        assert(CP.lateralParams.torqueBP[0] == 0)
+        assert(CP.lateralParams.torqueBP[0] == 0)
+        self.STEER_LOOKUP_BP = [v * -1 for v in CP.lateralParams.torqueBP][1:][::-1] + list(CP.lateralParams.torqueBP)
+        self.STEER_LOOKUP_V = [v * -1 for v in CP.lateralParams.torqueV][1:][::-1] + list(CP.lateralParams.torqueV)
 
 class CarController():
   def __init__(self, dbc_name, CP):
@@ -91,16 +100,14 @@ class CarController():
     self.accel_steady = 0.
     self.packer = CANPacker(dbc_name)
     self.new_radar_config = False
-    self.eps_modified = False
-    for fw in CP.carFw:
-      if fw.ecu == "eps" and b"," in fw.fwVersion:
-        print("EPS FW MODIFIED!")
-        self.eps_modified = True
+    self.params = CarControllerParams(CP)
 
   def update(self, enabled, CS, frame, actuators, \
              pcm_speed, pcm_override, pcm_cancel_cmd, pcm_accel, \
              hud_v_cruise, hud_show_lanes, hud_show_car, hud_alert):
 
+
+    P = self.params
     # *** apply brake hysteresis ***
     brake, self.braking, self.brake_steady = actuator_hystereses(actuators.brake, self.braking, self.brake_steady, CS.v_ego, CS.CP.carFingerprint)
 
@@ -158,7 +165,7 @@ class CarController():
       apply_brake = int(clip(self.brake_last * BRAKE_MAX, 0, BRAKE_MAX - 1))
 
     # steer torque is converted back to CAN reference (positive when steering right)
-    apply_steer = int(clip(-actuators.steer * STEER_MAX, -STEER_MAX, STEER_MAX))
+    apply_steer = int(interp(-actuators.steer * P.STEER_MAX, P.STEER_LOOKUP_BP, P.STEER_LOOKUP_V))
 
     if CS.CP.carFingerprint in (CAR.CIVIC) and self.eps_modified:
       if apply_steer > 0xA00:
