@@ -18,7 +18,11 @@ A_ACC_MAX = max(_A_CRUISE_MAX_V_FOLLOWING)
 ButtonType = car.CarState.ButtonEvent.Type
 GearShifter = car.CarState.GearShifter
 
-def compute_gb_honda(accel, speed):
+# TODO: adjust for bosch to prevent jerky creeping
+def compute_gb_honda_bosch(accel, speed):
+  return float(accel) / 4.0
+
+def compute_gb_honda_nidec(accel, speed):
   creep_brake = 0.0
   creep_speed = 2.3
   creep_brake_value = 0.15
@@ -95,8 +99,10 @@ class CarInterface(CarInterfaceBase):
 
     if self.CS.CP.carFingerprint == CAR.ACURA_ILX:
       self.compute_gb = get_compute_gb_acura()
+    elif self.CS.CP.carFingerprint in HONDA_BOSCH:
+      self.compute_gb = compute_gb_honda_bosch
     else:
-      self.compute_gb = compute_gb_honda
+      self.compute_gb = compute_gb_honda_nidec
 
   @staticmethod
   def calc_accel_override(a_ego, a_target, v_ego, v_target):
@@ -142,19 +148,21 @@ class CarInterface(CarInterfaceBase):
       ret.safetyModel = car.CarParams.SafetyModel.hondaBoschHarness if has_relay else car.CarParams.SafetyModel.hondaBoschGiraffe
       rdr_bus = 0 if has_relay else 2
       ret.enableCamera = is_ecu_disconnected(fingerprint[rdr_bus], FINGERPRINTS, ECU_FINGERPRINT, candidate, Ecu.fwdCamera) or has_relay
+      # TODO: should this be true when radar is unplugged/disabled?
       ret.radarOffCan = True
-      ret.openpilotLongitudinalControl = False
+      # TODO: only set to true when radar is unplugged
+      ret.openpilotLongitudinalControl = True
+      ret.enableCruise = not ret.openpilotLongitudinalControl
     else:
       ret.safetyModel = car.CarParams.SafetyModel.hondaNidec
       ret.enableCamera = is_ecu_disconnected(fingerprint[0], FINGERPRINTS, ECU_FINGERPRINT, candidate, Ecu.fwdCamera) or has_relay
       ret.enableGasInterceptor = 0x201 in fingerprint[0]
       ret.openpilotLongitudinalControl = ret.enableCamera
+      ret.enableCruise = not ret.enableGasInterceptor
+      ret.communityFeature = ret.enableGasInterceptor
 
     cloudlog.warning("ECU Camera Simulated: %r", ret.enableCamera)
     cloudlog.warning("ECU Gas Interceptor: %r", ret.enableGasInterceptor)
-
-    ret.enableCruise = not ret.enableGasInterceptor
-    ret.communityFeature = ret.enableGasInterceptor
 
     # Certain Hondas have an extra steering sensor at the bottom of the steering rack,
     # which improves controls quality as it removes the steering column torsion from feedback.
@@ -358,9 +366,13 @@ class CarInterface(CarInterfaceBase):
     ret.steerMaxV = [1.]   # max steer allowed
 
     ret.gasMaxBP = [0.]  # m/s
-    ret.gasMaxV = [0.6] if ret.enableGasInterceptor else [0.] # max gas allowed
-    ret.brakeMaxBP = [5., 20.]  # m/s
-    ret.brakeMaxV = [1., 0.8]   # max brake allowed
+    # TODO: what is the correct way to handle this?
+    ret.gasMaxV = [.5] #if ret.enableGasInterceptor else [0.] # max gas allowed
+    # TODO: make car specific
+    #ret.brakeMaxBP = [5., 20.]  # m/s
+    #ret.brakeMaxV = [1., 0.8]   # max brake allowed
+    ret.brakeMaxBP = [0.]  # m/s
+    ret.brakeMaxV = [1.]   # max brake allowed
 
     ret.longitudinalTuning.deadzoneBP = [0.]
     ret.longitudinalTuning.deadzoneV = [0.]
@@ -410,6 +422,7 @@ class CarInterface(CarInterfaceBase):
     ret.brakePressed = self.CS.brake_pressed != 0
     # FIXME: read sendcan for brakelights
     brakelights_threshold = 0.02 if self.CS.CP.carFingerprint == CAR.CIVIC else 0.1
+    # TODO: why does this use self.CS.brake_switch and not self.CS.brake_pressed?
     ret.brakeLights = bool(self.CS.brake_switch or
                            c.actuators.brake > brakelights_threshold)
 
@@ -508,7 +521,7 @@ class CarInterface(CarInterfaceBase):
       events.append(create_event('wrongCarMode', [ET.NO_ENTRY, ET.USER_DISABLE]))
     if ret.gearShifter == GearShifter.reverse:
       events.append(create_event('reverseGear', [ET.NO_ENTRY, ET.IMMEDIATE_DISABLE]))
-    if self.CS.brake_hold and self.CS.CP.carFingerprint not in HONDA_BOSCH:
+    if self.CS.brake_hold and self.CS.CP.openpilotLongitudinalControl:
       events.append(create_event('brakeHold', [ET.NO_ENTRY, ET.USER_DISABLE]))
     if self.CS.park_brake:
       events.append(create_event('parkBrake', [ET.NO_ENTRY, ET.USER_DISABLE]))

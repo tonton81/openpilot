@@ -2,13 +2,19 @@ from collections import namedtuple
 from cereal import car
 from common.realtime import DT_CTRL
 from selfdrive.controls.lib.drive_helpers import rate_limit
-from common.numpy_fast import clip
+from common.numpy_fast import clip, interp
 from selfdrive.car import create_gas_command
 from selfdrive.car.honda import hondacan
-from selfdrive.car.honda.values import CruiseButtons, CAR, VISUAL_HUD
+from selfdrive.car.honda.values import CruiseButtons, CAR, VISUAL_HUD, HONDA_BOSCH
 from opendbc.can.packer import CANPacker
 
 VisualAlert = car.CarControl.HUDControl.VisualAlert
+
+ACCEL_LOOKUP_BP = [-1., 0.5]
+ACCEL_LOOKUP_V = [-4., 2.]
+
+GAS_LOOKUP_BP = [0., 0.5]
+GAS_LOOKUP_V = [0, 2000]
 
 def actuator_hystereses(brake, braking, brake_steady, v_ego, car_fingerprint):
   # hyst params
@@ -82,6 +88,7 @@ class CarController():
     self.brake_last = 0.
     self.apply_brake_last = 0
     self.last_pump_ts = 0.
+    self.accel_steady = 0.
     self.packer = CANPacker(dbc_name)
     self.new_radar_config = False
     self.eps_modified = False
@@ -139,9 +146,18 @@ class CarController():
     else:
       STEER_MAX = 0x1000
 
+    if CS.CP.carFingerprint in HONDA_BOSCH:
+      accel = actuators.gas - actuators.brake
+      if accel < 0 and CS.v_ego == 0:
+        # prevent rolling backwards
+        accel = -1.0
+      apply_accel = interp(accel, ACCEL_LOOKUP_BP, ACCEL_LOOKUP_V)
+      apply_gas = interp(accel, GAS_LOOKUP_BP, GAS_LOOKUP_V)
+    else:
+      apply_gas = clip(actuators.gas, 0., 1.)
+      apply_brake = int(clip(self.brake_last * BRAKE_MAX, 0, BRAKE_MAX - 1))
+
     # steer torque is converted back to CAN reference (positive when steering right)
-    apply_gas = clip(actuators.gas, 0., 1.)
-    apply_brake = int(clip(self.brake_last * BRAKE_MAX, 0, BRAKE_MAX - 1))
     apply_steer = int(clip(-actuators.steer * STEER_MAX, -STEER_MAX, STEER_MAX))
 
     if CS.CP.carFingerprint in (CAR.CIVIC) and self.eps_modified:
@@ -158,14 +174,14 @@ class CarController():
     # Send steering command.
     idx = frame % 4
     can_sends.append(hondacan.create_steering_control(self.packer, apply_steer,
-      lkas_active, CS.CP.carFingerprint, idx, CS.CP.isPandaBlack))
+      lkas_active, CS.CP.carFingerprint, idx, CS.CP.isPandaBlack, CS.CP.openpilotLongitudinalControl))
 
     # Send dashboard UI commands.
     if (frame % 10) == 0:
       idx = (frame//10) % 4
-      can_sends.extend(hondacan.create_ui_commands(self.packer, pcm_speed, hud, CS.CP.carFingerprint, CS.is_metric, idx, CS.CP.isPandaBlack, CS.stock_hud))
+      can_sends.extend(hondacan.create_ui_commands(self.packer, pcm_speed, hud, CS.CP.carFingerprint, CS.is_metric, idx, CS.CP.isPandaBlack, CS.CP.openpilotLongitudinalControl, CS.stock_hud))
 
-    if CS.CP.radarOffCan:
+    if not CS.CP.openpilotLongitudinalControl:
       # If using stock ACC, spam cancel command to kill gas when OP disengages.
       if pcm_cancel_cmd:
         can_sends.append(hondacan.spam_buttons_command(self.packer, CruiseButtons.CANCEL, idx, CS.CP.carFingerprint, CS.CP.isPandaBlack))
@@ -177,14 +193,17 @@ class CarController():
       if (frame % 2) == 0:
         idx = frame // 2
         ts = frame * DT_CTRL
-        pump_on, self.last_pump_ts = brake_pump_hysteresis(apply_brake, self.apply_brake_last, self.last_pump_ts, ts)
-        can_sends.append(hondacan.create_brake_command(self.packer, apply_brake, pump_on,
-          pcm_override, pcm_cancel_cmd, hud.fcw, idx, CS.CP.carFingerprint, CS.CP.isPandaBlack, CS.stock_brake))
-        self.apply_brake_last = apply_brake
+        if CS.CP.carFingerprint in HONDA_BOSCH:
+          can_sends.extend(hondacan.create_acc_commands(self.packer, enabled, apply_accel, apply_gas, idx, CS.v_ego, CS.CP.carFingerprint, CS.CP.isPandaBlack))
+        else:
+          pump_on, self.last_pump_ts = brake_pump_hysteresis(apply_brake, self.apply_brake_last, self.last_pump_ts, ts)
+          can_sends.append(hondacan.create_brake_command(self.packer, apply_brake, pump_on,
+            pcm_override, pcm_cancel_cmd, hud.fcw, idx, CS.CP.carFingerprint, CS.CP.isPandaBlack, CS.stock_brake))
+          self.apply_brake_last = apply_brake
 
-        if CS.CP.enableGasInterceptor:
-          # send exactly zero if apply_gas is zero. Interceptor will send the max between read value and apply_gas.
-          # This prevents unexpected pedal range rescaling
-          can_sends.append(create_gas_command(self.packer, apply_gas, idx))
+          if CS.CP.enableGasInterceptor:
+            # send exactly zero if apply_gas is zero. Interceptor will send the max between read value and apply_gas.
+            # This prevents unexpected pedal range rescaling
+            can_sends.append(create_gas_command(self.packer, apply_gas, idx))
 
     return can_sends
