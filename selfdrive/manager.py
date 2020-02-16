@@ -289,6 +289,15 @@ def prepare_managed_process(p):
       subprocess.check_call(["make", "clean"], cwd=os.path.join(BASEDIR, proc[0]))
       subprocess.check_call(["make", "-j4"], cwd=os.path.join(BASEDIR, proc[0]))
 
+
+def join_process(process, timeout):
+  # Process().join(timeout) will hang due to a python 3 bug: https://bugs.python.org/issue28382
+  # We have to poll the exitcode instead
+  t = time.time()
+  while time.time() - t < timeout and process.exitcode is None:
+    time.sleep(0.001)
+
+
 def kill_managed_process(name):
   if name not in running or name not in managed_processes:
     return
@@ -302,18 +311,12 @@ def kill_managed_process(name):
     else:
       running[name].terminate()
 
-    # Process().join(timeout) will hang due to a python 3 bug: https://bugs.python.org/issue28382
-    # We have to poll the exitcode instead
-    # running[name].join(5.0)
-
-    t = time.time()
-    while time.time() - t < 5 and running[name].exitcode is None:
-      time.sleep(0.001)
+    join_process(running[name], 5)
 
     if running[name].exitcode is None:
       if name in unkillable_processes:
         cloudlog.critical("unkillable process %s failed to exit! rebooting in 15 if it doesn't die" % name)
-        running[name].join(15.0)
+        join_process(running[name], 15)
         if running[name].exitcode is None:
           cloudlog.critical("FORCE REBOOTING PHONE!")
           os.system("date >> /sdcard/unkillable_reboot")
@@ -502,6 +505,8 @@ def main():
     params.put("LastUpdateTime", t.encode('utf8'))
   if params.get("OpenpilotEnabledToggle") is None:
     params.put("OpenpilotEnabledToggle", "1")
+  if params.get("LaneChangeEnabled") is None:
+    params.put("LaneChangeEnabled", "1")
 
   # is this chffrplus?
   if os.getenv("PASSIVE") is not None:
