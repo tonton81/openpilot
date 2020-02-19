@@ -267,7 +267,7 @@ ALERTS = [
       "openpilot Unavailable",
       "Main Switch Off",
       AlertStatus.normal, AlertSize.mid,
-      Priority.LOW, VisualAlert.none, AudibleAlert.chimeError, .4, 0., 3.),
+      Priority.LOW, VisualAlert.none, AudibleAlert.none, .4, 0., 3.),
 
   Alert(
       "dataNeededNoEntry",
