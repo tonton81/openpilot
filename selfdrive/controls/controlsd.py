@@ -106,11 +106,11 @@ def data_sample(CI, CC, sm, can_sock, state, mismatch_counter, can_error_counter
   cal_status = sm['liveCalibration'].calStatus
   cal_perc = sm['liveCalibration'].calPerc
 
-  if cal_status != Calibration.CALIBRATED:
-    if cal_status == Calibration.UNCALIBRATED:
-      events.append(create_event('calibrationIncomplete', [ET.NO_ENTRY, ET.SOFT_DISABLE, ET.PERMANENT]))
-    else:
-      events.append(create_event('calibrationInvalid', [ET.NO_ENTRY, ET.SOFT_DISABLE]))
+  #if cal_status != Calibration.CALIBRATED:
+  #  if cal_status == Calibration.UNCALIBRATED:
+  #    events.append(create_event('calibrationIncomplete', [ET.NO_ENTRY, ET.SOFT_DISABLE, ET.PERMANENT]))
+  #  else:
+  #    events.append(create_event('calibrationInvalid', [ET.NO_ENTRY, ET.SOFT_DISABLE]))
 
   # When the panda and controlsd do not agree on controls_allowed
   # we want to disengage openpilot. However the status from the panda goes through

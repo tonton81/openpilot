@@ -30,7 +30,7 @@ def plannerd_thread(sm=None, pm=None):
     sm = messaging.SubMaster(['carState', 'controlsState', 'radarState', 'model', 'liveParameters'])
 
   if pm is None:
-    pm = messaging.PubMaster(['plan', 'liveLongitudinalMpc', 'pathPlan', 'liveMpc'])
+    pm = messaging.PubMaster(['plan', 'liveLongitudinalMpc', 'pathPlan', 'liveMpc', 'boschModel', 'boschModel2'])
 
   sm['liveParameters'].valid = True
   sm['liveParameters'].sensorValid = True

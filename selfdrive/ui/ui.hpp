@@ -85,6 +85,7 @@ typedef struct UIScene {
   int transformed_width, transformed_height;
 
   ModelData model;
+  ModelData model2;
 
   float mpc_x[50];
   float mpc_y[50];
@@ -117,6 +118,8 @@ typedef struct UIScene {
   float lead_d_rel, lead_y_rel, lead_v_rel;
 
   int front_box_x, front_box_y, front_box_width, front_box_height;
+
+  bool recording;
 
   uint64_t alert_ts;
   char alert_text1[1024];
@@ -169,9 +172,11 @@ typedef struct UIState {
   // sockets
   Context *ctx;
   SubSocket *model_sock;
+  SubSocket *model2_sock;
   SubSocket *controlsstate_sock;
   SubSocket *livecalibration_sock;
   SubSocket *radarstate_sock;
+  SubSocket *livempc_sock;
   SubSocket *map_data_sock;
   SubSocket *uilayout_sock;
   Poller * poller;
@@ -244,14 +249,16 @@ typedef struct UIState {
   GLuint frame_vao[2], frame_vbo[2], frame_ibo[2];
   mat4 rear_frame_mat, front_frame_mat;
 
-  model_path_vertices_data model_path_vertices[MODEL_LANE_PATH_CNT * 2];
+  model_path_vertices_data model_path_vertices[MODEL_LANE_PATH_CNT * 4];
 
   track_vertices_data track_vertices[2];
 } UIState;
 
+//#include "dashcam.h"
+
 // API
 void ui_draw_vision_alert(UIState *s, int va_size, int va_color,
-                          const char* va_text1, const char* va_text2); 
+                          const char* va_text1, const char* va_text2);
 void ui_draw(UIState *s);
 void ui_nvg_init(UIState *s);
 

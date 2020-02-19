@@ -127,7 +127,8 @@ int main(int argc, char *argv[]) {
         save_counter++;
 
         double yaw_rate = -localizer.x[0];
-        bool valid = learner.update(yaw_rate, localizer.car_speed, localizer.steering_angle);
+        // bool valid = learner.update(yaw_rate, localizer.car_speed, localizer.steering_angle);
+        bool valid = true; // disable learner updating
 
         // TODO: Fix in replay
         double sensor_data_age = localizer.controls_state_time - localizer.sensor_data_time;

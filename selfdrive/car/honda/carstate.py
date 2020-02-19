@@ -176,6 +176,52 @@ def get_cam_can_parser(CP):
   checks = [(0xe4, 100)]
   if CP.carFingerprint in [CAR.CRV, CAR.ACURA_RDX, CAR.ODYSSEY_CHN]:
     checks = [(0x194, 100)]
+  # Extract Bosch camera signals at 100Hz (the signals themselves occur at 15Hz)
+  signals += [("LINE_OFFSET", "LEFT_LANE_LINE_1", 0),
+              ("LINE_ANGLE", "LEFT_LANE_LINE_1", 0),
+              ("LINE_PROBABILITY", "LEFT_LANE_LINE_1", 0),
+              ("LINE_DISTANCE_VISIBLE", "LEFT_LANE_LINE_1", 0),
+              ("LINE_CURVATURE", "LEFT_LANE_LINE_2", 0),
+              ("LINE_JERK", "LEFT_LANE_LINE_2", 0),
+              ("LINE_SOLID", "LEFT_LANE_LINE_2", 0),
+              ("LINE_DASHED", "LEFT_LANE_LINE_2", 0)]
+
+  signals += [("LINE_OFFSET", "RIGHT_LANE_LINE_1", 0),
+              ("LINE_ANGLE", "RIGHT_LANE_LINE_1", 0),
+              ("LINE_PROBABILITY", "RIGHT_LANE_LINE_1", 0),
+              ("LINE_DISTANCE_VISIBLE", "RIGHT_LANE_LINE_1", 0),
+              ("LINE_CURVATURE", "RIGHT_LANE_LINE_2", 0),
+              ("LINE_JERK", "RIGHT_LANE_LINE_2", 0),
+              ("LINE_SOLID", "RIGHT_LANE_LINE_2", 0),
+              ("LINE_DASHED", "RIGHT_LANE_LINE_2", 0)]
+
+  signals += [("LINE_OFFSET", "ADJACENT_LEFT_LANE_LINE_1", 0),
+              ("LINE_ANGLE", "ADJACENT_LEFT_LANE_LINE_1", 0),
+              ("LINE_PROBABILITY", "ADJACENT_LEFT_LANE_LINE_1", 0),
+              ("LINE_DISTANCE_VISIBLE", "ADJACENT_LEFT_LANE_LINE_1", 0),
+              ("LINE_CURVATURE", "ADJACENT_LEFT_LANE_LINE_2", 0),
+              ("LINE_JERK", "ADJACENT_LEFT_LANE_LINE_2", 0),
+              ("LINE_SOLID", "ADJACENT_LEFT_LANE_LINE_2", 0),
+              ("LINE_DASHED", "ADJACENT_LEFT_LANE_LINE_2", 0)]
+
+  signals += [("LINE_OFFSET", "ADJACENT_RIGHT_LANE_LINE_1", 0),
+              ("LINE_ANGLE", "ADJACENT_RIGHT_LANE_LINE_1", 0),
+              ("LINE_PROBABILITY", "ADJACENT_RIGHT_LANE_LINE_1", 0),
+              ("LINE_DISTANCE_VISIBLE", "ADJACENT_RIGHT_LANE_LINE_1", 0),
+              ("LINE_CURVATURE", "ADJACENT_RIGHT_LANE_LINE_2", 0),
+              ("LINE_JERK", "ADJACENT_RIGHT_LANE_LINE_2", 0),
+              ("LINE_SOLID", "ADJACENT_RIGHT_LANE_LINE_2", 0),
+              ("LINE_DASHED", "ADJACENT_RIGHT_LANE_LINE_2", 0)]
+
+  checks += [("LEFT_LANE_LINE_1", 100),
+             ("LEFT_LANE_LINE_2", 100),
+             ("RIGHT_LANE_LINE_1", 100),
+             ("RIGHT_LANE_LINE_2", 100),
+             ("ADJACENT_LEFT_LANE_LINE_1", 100),
+             ("ADJACENT_LEFT_LANE_LINE_2", 100),
+             ("ADJACENT_RIGHT_LANE_LINE_1", 100),
+             ("ADJACENT_RIGHT_LANE_LINE_2", 100)]
+
 
   bus_cam = 1 if CP.carFingerprint in HONDA_BOSCH  and not CP.isPandaBlack else 2
   return CANParser(DBC[CP.carFingerprint]['pt'], signals, checks, bus_cam)
@@ -208,6 +254,30 @@ class CarState(CarStateBase):
     self.prev_right_blinker_on = self.right_blinker_on
 
     # ******************* parse out can *******************
+    self.l_poly = [cp_cam.vl["LEFT_LANE_LINE_2"]['LINE_JERK'] , cp_cam.vl["LEFT_LANE_LINE_2"]['LINE_CURVATURE'] , cp_cam.vl["LEFT_LANE_LINE_1"]['LINE_ANGLE'] , cp_cam.vl["LEFT_LANE_LINE_1"]['LINE_OFFSET']]
+    self.l_prob = cp_cam.vl["LEFT_LANE_LINE_1"]['LINE_PROBABILITY']
+    self.l_distVis = cp_cam.vl["LEFT_LANE_LINE_1"]['LINE_DISTANCE_VISIBLE']
+    self.l_isSolid = cp_cam.vl["LEFT_LANE_LINE_2"]['LINE_SOLID']
+    self.l_isDashed = cp_cam.vl["LEFT_LANE_LINE_2"]['LINE_DASHED']
+
+    self.r_poly = [cp_cam.vl["RIGHT_LANE_LINE_2"]['LINE_JERK'] , cp_cam.vl["RIGHT_LANE_LINE_2"]['LINE_CURVATURE'] , cp_cam.vl["RIGHT_LANE_LINE_1"]['LINE_ANGLE'] , cp_cam.vl["RIGHT_LANE_LINE_1"]['LINE_OFFSET']]
+    self.r_prob = cp_cam.vl["RIGHT_LANE_LINE_1"]['LINE_PROBABILITY']
+    self.r_distVis = cp_cam.vl["RIGHT_LANE_LINE_1"]['LINE_DISTANCE_VISIBLE']
+    self.r_isSolid = cp_cam.vl["RIGHT_LANE_LINE_2"]['LINE_SOLID']
+    self.r_isDashed = cp_cam.vl["RIGHT_LANE_LINE_2"]['LINE_DASHED']
+
+    self.lAdj_poly = [cp_cam.vl["ADJACENT_LEFT_LANE_LINE_2"]['LINE_JERK'] , cp_cam.vl["ADJACENT_LEFT_LANE_LINE_2"]['LINE_CURVATURE'] , cp_cam.vl["ADJACENT_LEFT_LANE_LINE_1"]['LINE_ANGLE'] , cp_cam.vl["ADJACENT_LEFT_LANE_LINE_1"]['LINE_OFFSET']]
+    self.lAdj_prob = cp_cam.vl["ADJACENT_LEFT_LANE_LINE_1"]['LINE_PROBABILITY']
+    self.lAdj_distVis = cp_cam.vl["ADJACENT_LEFT_LANE_LINE_1"]['LINE_DISTANCE_VISIBLE']
+    self.lAdj_isSolid = cp_cam.vl["ADJACENT_LEFT_LANE_LINE_2"]['LINE_SOLID']
+    self.lAdj_isDashed = cp_cam.vl["ADJACENT_LEFT_LANE_LINE_2"]['LINE_DASHED']
+
+    self.rAdj_poly = [cp_cam.vl["ADJACENT_RIGHT_LANE_LINE_2"]['LINE_JERK'] , cp_cam.vl["ADJACENT_RIGHT_LANE_LINE_2"]['LINE_CURVATURE'] , cp_cam.vl["ADJACENT_RIGHT_LANE_LINE_1"]['LINE_ANGLE'] , cp_cam.vl["ADJACENT_RIGHT_LANE_LINE_1"]['LINE_OFFSET']]
+    self.rAdj_prob = cp_cam.vl["ADJACENT_RIGHT_LANE_LINE_1"]['LINE_PROBABILITY']
+    self.rAdj_distVis = cp_cam.vl["ADJACENT_RIGHT_LANE_LINE_1"]['LINE_DISTANCE_VISIBLE']
+    self.rAdj_isSolid = cp_cam.vl["ADJACENT_RIGHT_LANE_LINE_2"]['LINE_SOLID']
+    self.rAdj_isDashed = cp_cam.vl["ADJACENT_RIGHT_LANE_LINE_2"]['LINE_DASHED']
+
     if self.CP.carFingerprint in (CAR.ACCORD, CAR.ACCORD_15, CAR.ACCORDH, CAR.CIVIC_BOSCH, CAR.CRV_HYBRID): # TODO: find wheels moving bit in dbc
       self.standstill = cp.vl["ENGINE_DATA"]['XMISSION_SPEED'] < 0.1
       self.door_all_closed = not cp.vl["SCM_FEEDBACK"]['DRIVERS_DOOR_OPEN']

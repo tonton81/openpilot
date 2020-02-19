@@ -387,6 +387,43 @@ class CarInterface(CarInterfaceBase):
 
     ret.canValid = self.cp.can_valid and self.cp_cam.can_valid
 
+    # Bosch Lane Polynomials
+    ret.lPoly.c3 = self.CS.l_poly[3]
+    ret.lPoly.c2 = self.CS.l_poly[2]
+    ret.lPoly.c1 = self.CS.l_poly[1]
+    ret.lPoly.c0 = self.CS.l_poly[0]
+    ret.lPoly.prob = self.CS.l_prob
+    ret.lPoly.distVis = self.CS.l_distVis
+    ret.lPoly.isSolid = bool(self.CS.l_isSolid)
+    ret.lPoly.isDashed = bool(self.CS.l_isDashed)
+
+    ret.rPoly.c3 = self.CS.r_poly[3]
+    ret.rPoly.c2 = self.CS.r_poly[2]
+    ret.rPoly.c1 = self.CS.r_poly[1]
+    ret.rPoly.c0 = self.CS.r_poly[0]
+    ret.rPoly.prob = self.CS.r_prob
+    ret.rPoly.distVis = self.CS.r_distVis
+    ret.rPoly.isSolid = bool(self.CS.r_isSolid)
+    ret.rPoly.isDashed = bool(self.CS.r_isDashed)
+
+    ret.lAdjPoly.c3 = self.CS.lAdj_poly[3]
+    ret.lAdjPoly.c2 = self.CS.lAdj_poly[2]
+    ret.lAdjPoly.c1 = self.CS.lAdj_poly[1]
+    ret.lAdjPoly.c0 = self.CS.lAdj_poly[0]
+    ret.lAdjPoly.prob = self.CS.lAdj_prob
+    ret.lAdjPoly.distVis = self.CS.lAdj_distVis
+    ret.lAdjPoly.isSolid = bool(self.CS.lAdj_isSolid)
+    ret.lAdjPoly.isDashed = bool(self.CS.lAdj_isDashed)
+
+    ret.rAdjPoly.c3 = self.CS.rAdj_poly[3]
+    ret.rAdjPoly.c2 = self.CS.rAdj_poly[2]
+    ret.rAdjPoly.c1 = self.CS.rAdj_poly[1]
+    ret.rAdjPoly.c0 = self.CS.rAdj_poly[0]
+    ret.rAdjPoly.prob = self.CS.rAdj_prob
+    ret.rAdjPoly.distVis = self.CS.rAdj_distVis
+    ret.rAdjPoly.isSolid = bool(self.CS.rAdj_isSolid)
+    ret.rAdjPoly.isDashed = bool(self.CS.rAdj_isDashed)
+
     # speeds
     ret.vEgo = self.CS.v_ego
     ret.aEgo = self.CS.a_ego

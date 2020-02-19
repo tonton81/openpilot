@@ -9,14 +9,13 @@ from selfdrive.config import Conversions as CV
 from common.params import Params
 import cereal.messaging as messaging
 from cereal import log
+from common.numpy_fast import interp
+from common.op_params import opParams
 
 LaneChangeState = log.PathPlan.LaneChangeState
 LaneChangeDirection = log.PathPlan.LaneChangeDirection
 
-LOG_MPC = os.environ.get('LOG_MPC', False)
-
-LANE_CHANGE_SPEED_MIN = 45 * CV.MPH_TO_MS
-LANE_CHANGE_TIME_MAX = 10.
+LOG_MPC = os.environ.get('LOG_MPC', True)
 
 DESIRES = {
   LaneChangeDirection.none: {
@@ -44,6 +43,16 @@ def calc_states_after_delay(states, v_ego, steer_angle, curvature_factor, steer_
   states[0].psi = v_ego * curvature_factor * math.radians(steer_angle) / steer_ratio * delay
   return states
 
+def compute_liveSteerRatio(op_params,angle_steers,angle_offset):
+  baseSR = op_params.get('steerRatio')
+  srBoost = op_params.get('srBoost')
+  srB0 = op_params.get('srB0')
+  srB1 = op_params.get('srB1')
+  angle_steers_corr = angle_steers - angle_offset
+
+  steerRatio = baseSR + interp(abs(angle_steers_corr),[srB0, srB1],[0, srBoost])
+
+  return steerRatio
 
 class PathPlanner():
   def __init__(self, CP):
@@ -59,6 +68,8 @@ class PathPlanner():
     self.lane_change_direction = LaneChangeDirection.none
     self.lane_change_timer = 0.0
     self.prev_one_blinker = False
+
+    self.op_params = opParams()
 
   def setup_mpc(self):
     self.libmpc = libmpc_py.libmpc
@@ -83,12 +94,14 @@ class PathPlanner():
 
     angle_offset = sm['liveParameters'].angleOffset
 
+    liveSteerRatio = compute_liveSteerRatio(self.op_params,angle_steers,angle_offset)
+
     # Run MPC
     self.angle_steers_des_prev = self.angle_steers_des_mpc
-    VM.update_params(sm['liveParameters'].stiffnessFactor, sm['liveParameters'].steerRatio)
+    VM.update_params(sm['liveParameters'].stiffnessFactor, liveSteerRatio)
     curvature_factor = VM.curvature_factor(v_ego)
 
-    self.LP.parse_model(sm['model'])
+    self.LP.parse_model(sm['model'], sm['carState'])
 
     # Lane change logic
     one_blinker = sm['carState'].leftBlinker != sm['carState'].rightBlinker
@@ -160,7 +173,7 @@ class PathPlanner():
                         self.LP.l_prob, self.LP.r_prob, curvature_factor, v_ego_mpc, self.LP.lane_width)
 
     # reset to current steer angle if not active or overriding
-    if active:
+    if active and self.LP.lanes_valid:
       delta_desired = self.mpc_solution[0].delta[1]
       rate_desired = math.degrees(self.mpc_solution[0].rate[0] * VM.sR)
     else:
@@ -211,6 +224,68 @@ class PathPlanner():
     plan_send.pathPlan.laneChangeDirection = self.lane_change_direction
 
     pm.send('pathPlan', plan_send)
+
+    # create Bosch left / right line model structure to send to UI
+
+    boschModel_send = messaging.new_message()
+    boschModel_send.init('model')
+    boschModel_send.valid = plan_send.valid
+    boschModel_send.model.frameId = sm['model'].frameId
+
+    boschModel_send.model.path.prob = 1.0
+    boschModel_send.model.path.std = .10
+    boschModel_send.model.path.poly = [float(x) for x in self.LP.d_poly]
+    
+    boschModel_send.model.leftLane.prob = float(self.LP.l_prob)
+    boschModel_send.model.leftLane.std = .10
+    boschModel_send.model.leftLane.poly = [float(x) for x in self.LP.l_poly]
+
+    boschModel_send.model.rightLane.prob = float(self.LP.r_prob)
+    boschModel_send.model.rightLane.std = .10
+    boschModel_send.model.rightLane.poly = [float(x) for x in self.LP.r_poly]
+
+    boschModel_send.model.lead.dist = 500.0
+    boschModel_send.model.lead.prob = 0.0
+    boschModel_send.model.lead.std = 100.0
+    boschModel_send.model.lead.relVel = 0.0
+    boschModel_send.model.lead.relVelStd = 100.0
+    boschModel_send.model.lead.relY = 0.0
+    boschModel_send.model.lead.relYStd = 100.0
+    boschModel_send.model.lead.relA = 0.0
+    boschModel_send.model.lead.relAStd = 100.0
+
+    boschModel_send.model.leadFuture = boschModel_send.model.lead
+
+    boschModel_send.model.speed =[50., 50., 50., 50., 50., 50., 50., 50., 50., 50.]
+
+    boschModel_send.model.timestampEof = sm['model'].timestampEof
+
+    # create Bosch left / right adjacent line model structure to send to UI
+
+    boschModel2_send = messaging.new_message()
+    boschModel2_send.init('model')
+    boschModel2_send.valid = plan_send.valid
+    boschModel2_send.model.frameId = sm['model'].frameId
+
+    boschModel2_send.model.path = boschModel_send.model.path
+    
+    boschModel2_send.model.leftLane.prob = float(self.LP.lAdj_prob)
+    boschModel2_send.model.leftLane.std = .10
+    boschModel2_send.model.leftLane.poly = [float(x) for x in self.LP.lAdj_poly]
+
+    boschModel2_send.model.rightLane.prob = float(self.LP.rAdj_prob)
+    boschModel2_send.model.rightLane.std = .10
+    boschModel2_send.model.rightLane.poly = [float(x) for x in self.LP.rAdj_poly]
+
+    boschModel2_send.model.lead = boschModel_send.model.lead
+    boschModel2_send.model.leadFuture = boschModel_send.model.lead
+
+    boschModel2_send.model.speed =[50., 50., 50., 50., 50., 50., 50., 50., 50., 50.]
+
+    boschModel2_send.model.timestampEof = sm['model'].timestampEof
+
+    pm.send('boschModel', boschModel_send)
+    pm.send('boschModel2', boschModel2_send)
 
     if LOG_MPC:
       dat = messaging.new_message()

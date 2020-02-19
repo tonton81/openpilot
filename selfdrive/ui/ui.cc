@@ -106,24 +106,30 @@ static void ui_init(UIState *s) {
   pthread_cond_init(&s->bg_cond, NULL);
 
   s->ctx = Context::create();
-  s->model_sock = SubSocket::create(s->ctx, "model");
+  s->model_sock = SubSocket::create(s->ctx, "boschModel");
+  s->model2_sock = SubSocket::create(s->ctx, "boschModel2");
   s->controlsstate_sock = SubSocket::create(s->ctx, "controlsState");
   s->uilayout_sock = SubSocket::create(s->ctx, "uiLayoutState");
   s->livecalibration_sock = SubSocket::create(s->ctx, "liveCalibration");
   s->radarstate_sock = SubSocket::create(s->ctx, "radarState");
+  s->livempc_sock = SubSocket::create(s->ctx, "liveMpc");
 
   assert(s->model_sock != NULL);
+  assert(s->model2_sock != NULL);
   assert(s->controlsstate_sock != NULL);
   assert(s->uilayout_sock != NULL);
   assert(s->livecalibration_sock != NULL);
   assert(s->radarstate_sock != NULL);
+  assert(s->livempc_sock != NULL);
 
   s->poller = Poller::create({
                               s->model_sock,
+                              s->model2_sock,
                               s->controlsstate_sock,
                               s->uilayout_sock,
                               s->livecalibration_sock,
-                              s->radarstate_sock
+                              s->radarstate_sock,
+                              s->livempc_sock
                              });
 
 #ifdef SHOW_SPEEDLIMIT
@@ -375,8 +381,13 @@ void handle_message(UIState *s, Message * msg) {
           capn_to_f32(capn_get32(extrinsicl, i));
     }
   } else if (eventd.which == cereal_Event_model) {
-    s->scene.model = read_model(eventd.model);
-    s->model_changed = true;
+    if (s->model_changed == false) {
+        s->scene.model = read_model(eventd.model);
+        s->model_changed = true;
+    }
+    else {
+        s->scene.model2 = read_model(eventd.model);
+    }
   } else if (eventd.which == cereal_Event_liveMpc) {
     struct cereal_LiveMpcData datad;
     cereal_read_LiveMpcData(&datad, eventd.liveMpc);
@@ -877,6 +888,13 @@ int main(int argc, char* argv[]) {
       }
     }
 
+    // awake on any touch
+    int touch_x = -1, touch_y = -1;
+    int touched = touch_poll(&touch, &touch_x, &touch_y, s->awake ? 0 : 100);
+    if (touched == 1) {
+      set_awake(s, true);
+    }
+
     // manage wakefulness
     if (s->awake_timeout > 0) {
       s->awake_timeout--;
@@ -886,6 +904,7 @@ int main(int argc, char* argv[]) {
 
     // Don't waste resources on drawing in case screen is off or car is not started.
     if (s->awake && s->vision_connected) {
+//      dashcam(s, touch_x, touch_y);
       ui_draw(s);
       glFinish();
       should_swap = true;
