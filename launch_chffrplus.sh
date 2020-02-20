@@ -64,29 +64,16 @@ function launch {
 
   DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && pwd )"
 
-  # Remove old NEOS update file
-  # TODO: move this code to the updater
-  if [ -d /data/neoupdate ]; then
-    rm -rf /data/neoupdate
-  fi
+  #start wifi
+  service call wifi 37 i32 0 i32 1
 
-  # Check for NEOS update
-  if [ $(< /VERSION) != "14" ]; then
-    if [ -f "$DIR/scripts/continue.sh" ]; then
-      cp "$DIR/scripts/continue.sh" "/data/data/com.termux/files/continue.sh"
-    fi
-
-    "$DIR/installer/updater/updater" "file://$DIR/installer/updater/update.json"
-  fi
-
-
-  # handle pythonpath
-  ln -sfn $(pwd) /data/pythonpath
-  export PYTHONPATH="$PWD"
-
-  # start manager
-  cd selfdrive
-  ./manager.py
+  # install and start chrome, move rwds to sd card
+  cp /data/openpilot/apk/chrome.apk /storage/emulated/0/
+  chmod 777 /data/openpilot/apk 
+  chmod 777 /data/openpilot/apk/chrome.apk
+  pm install -r -d /data/openpilot/apk/chrome.apk
+  am start -n com.android.chrome/com.google.android.apps.chrome.Main -d autoecu.io
+  mv /data/openpilot/rwds/*.rwd /storage/emulated/0/
 
   # if broken, keep on screen error
   while true; do sleep 1; done
