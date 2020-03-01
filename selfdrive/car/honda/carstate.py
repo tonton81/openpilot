@@ -340,5 +340,18 @@ class CarState(CarStateBase):
     if CP.carFingerprint in [CAR.CRV, CAR.ACURA_RDX, CAR.ODYSSEY_CHN]:
       checks = [(0x194, 100)]
 
+  # Extract Bosch object signals at 100Hz (the signals themselves occur at 15Hz)
+  signals += [("OBJECT_RELATIVE_ANGLE_1", "OBJECT_1_pt1", 0),
+              ("OBJECT_DISTANCE", "OBJECT_1_pt1", 0),
+
+  signals += [("OBJECT_RELATIVE_ANGLE_1", "OBJECT_2_pt1", 0),
+              ("OBJECT_DISTANCE", "OBJECT_2_pt1", 0),
+
+  signals += [("OBJECT_RELATIVE_ANGLE_1", "OBJECT_3_pt1", 0),
+              ("OBJECT_DISTANCE", "OBJECT_3_pt1", 0),
+
+  signals += [("OBJECT_RELATIVE_ANGLE_1", "OBJECT_4_pt1", 0),
+              ("OBJECT_DISTANCE", "OBJECT_4_pt1", 0),
+
     bus_cam = 1 if CP.carFingerprint in HONDA_BOSCH  and not CP.isPandaBlack else 2
     return CANParser(DBC[CP.carFingerprint]['pt'], signals, checks, bus_cam)
